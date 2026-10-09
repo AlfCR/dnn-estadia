@@ -1,5 +1,3 @@
-import os
-import sys
 import csv
 import io
 import hashlib
@@ -11,15 +9,12 @@ import pandas as pd
 
 
 # ===== CONSTANTES =====
-# Nombres de los meses en español abreviados
+
 MESES = {
     'ene': 1, 'feb': 2, 'mar': 3, 'abr': 4, 'may': 5,
     'jun': 6, 'jul': 7, 'ago': 8, 'sep': 9, 'oct': 10,
     'nov': 11, 'dic': 12
 }
-
-# Valores que se consideran nulos o vacíos
-FALTANTES = {'', '-', 'nan', 'NaN', 'null', 'NULL', 'None'}
 
 # Configuración por defecto de ventanas ()
 VENTANA_SEG_DEFAULT = 30
@@ -184,7 +179,7 @@ def catalogar_viajes(ruta):
 
     return bloques_por_huella
 
-# === FUNCIONES DE [] ======
+# === FUNCIONES DE CARGA DE VIAJES ======
 def cargar_viajes_unicos(catalogo, fuente, viaje_num_inicial=1):
     partes = [] #Inicializar lista de partes de DataFrame
     viaje_num = viaje_num_inicial
@@ -324,7 +319,7 @@ def limpiar_dataset(df_raw):
     print(f'Duplicados eliminados: {antes - len(df_limpio)}')
 
     # Ordenar
-    df_limpio = df_limpio.sort_values(['id_viaje', 'timestamp']).reset_index(drop=True)
+    df_limpio = df_limpio.sort_values(['viaje_num', 'timestamp']).reset_index(drop=True)
 
     
 
@@ -339,15 +334,33 @@ def segmentar_y_remuestrear(
         duracion_minima_seg=30
         ):
     """
-    Segmenta cada viaje por huecos temporales y remuestrea a 1 hz.
-    Los Hz son 
+    Segmenta cada viaje por huecos temporales y remuestrea a 1 Hz.
+
+    - Recorta los primeros segundos de cada viaje.
+    - Divide en segmentos cuando hay huecos > `hueco_max_seg`.
+    - Remuestrea a 1 Hz promediando por segundo.
+    - Interpola vacíos cortos dentro de cada segmento.
+    - Descarta segmentos más cortos que `duracion_minima_seg`.
+
+    Args:
+        df (pd.DataFrame): DataFrame limpio.
+        tiempo_recorte_seg (int): Segundos a recortar al inicio.
+        hueco_max_seg (int): Umbral de hueco para abrir segmento.
+        rango_interpolacion (int): Máximo de vacíos a interpolar.
+        duracion_minima_seg (int): Duración mínima del segmento.
+
+    Returns:
+        pd.DataFrame: DataFrame segmentado y a 1 Hz.
     """
+    
     inicio = df.groupby('id_viaje')['timestamp'].transform('min')
     df = df[df['timestamp'] >= inicio + pd.Timedelta(seconds=tiempo_recorte_seg)].copy()
 
     # Ordenar y detectar saltos temporales
-    df = df.sort_values(['id_viaje', 'timestamp']).reset_index(drop=True)
+    df = df.sort_values(['viaje_num', 'timestamp']).reset_index(drop=True)
+
     dt = df.groupby('id_viaje')['timestamp'].diff().dt.total_seconds()
+
     salto = (dt > hueco_max_seg) | dt.isna()
 
     df['segmento_id'] = salto.groupby(df['id_viaje']).cumsum() 
@@ -367,14 +380,12 @@ def segmentar_y_remuestrear(
 
     # Interpolar vacíos cortos por segmento
     partes = []
+
     for (viaje, segmento), g in df_1hz.groupby(['id_viaje', 'segmento_id']):
+        meta = g.iloc[0][columnas_meta]
         g = g.set_index('timestamp').resample('1s').asfreq()
-        # Restaurar metadata
-        g['id_viaje'] = viaje
-        g['segmento_id'] = segmento
-        g['viaje_num'] = g['viaje_num'].iloc[0] if 'viaje_num' in g.columns else None
-        g['tiene_motor'] = g['tiene_motor'].iloc[0] if 'tiene_motor' in g.columns else None
-        
+        for c in columnas_meta:
+            g[c] = meta[c]
         # Interpolar columnas numéricas
         g[columnas_num] = g[columnas_num].interpolate(
             method='linear', limit=rango_interpolacion
@@ -392,13 +403,22 @@ def segmentar_y_remuestrear(
     df_final[columnas_num] = df_final[columnas_num].round(2)
 
     # Ordenar
-    df_final = df_final.sort_values(['id_viaje', 'segmento_id', 'timestamp'])
+    df_final = df_final.sort_values(['viaje_num', 'segmento_id', 'timestamp'])
     df_final = df_final.reset_index(drop=True)
 
     return df_final
     
 # particionar
 def particionar(df):
+    """
+    Asigna cada viaje a una partición.
+
+    Args:
+        df (pd.DataFrame): DataFrame segmentado.
+
+    Returns:
+        pd.DataFrame: Mismo DataFrame + columna 'particion'.
+    """
     particiones_config = {
         'entrenamiento':  [1, 2, 3, 4, 8, 9],
         'validacion':     [7],
@@ -407,26 +427,31 @@ def particionar(df):
         'sin_motor':      [10, 11, 12, 13, 15, 18],
     }
 
-    # Invertir el diccionario.
+    todos = [v for viajes in particiones_config.values() for v in viajes]
+    assert len(todos) == len(set(todos)), \
+        "Hay viajes asignados a más de una partición."
+
     mapa_viajes = {
         viaje: particion
         for particion, viajes in particiones_config.items()
         for viaje in viajes
     }
 
-    # Asignar la partición
+    df = df.copy()
     df['particion'] = df['viaje_num'].map(mapa_viajes)
 
-    # Avisar de viajes sin asignar
-    viajes_sin_asignar = sorted(df[df['particion'].isna()]['viaje_num'].unique())
-    if viajes_sin_asignar:
-        print(f'Viajes sin asignar: {viajes_sin_asignar}')
+    assert df['particion'].notna().all(), \
+        f"Viajes sin asignar: {sorted(df.loc[df['particion'].isna(), 'viaje_num'].unique())}"
 
     return df
 
 
 # normalizar
 def normalizar(df, variables=VARIABLES_BASE):
+
+    modelo = df['particion'].isin(['entrenamiento', 'validacion', 'prueba'])
+    assert df.loc[modelo, variables].notna().all().all(), \
+        "Hay vacíos en las filas del modelo."
 
     # Filtrar solo entrenamiento
     train = df[df['particion'] == 'entrenamiento']
@@ -540,4 +565,81 @@ def generar_ventanas(df_norm,
         'parametros': [ventana_seg, horizonte_seg, ventana_movil_seg],
     }
 
-# MAIN
+def parsear_argumentos():
+    parser = argparse.ArgumentParser(
+        description='Preprocesamiento de datos de telemetría vehicular.'
+    )
+    parser.add_argument(
+        '--measurement',
+        required=True,
+        help='Carpeta "Measurement complementary".'
+    )
+    parser.add_argument(
+        '--chiapas',
+        required=True,
+        help='Carpeta "Mediciones Agosto 2024 Chiapas".'
+    )
+    parser.add_argument(
+        '--salida',
+        required=True,
+        help='Carpeta donde se guardan los resultados.'
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parsear_argumentos()
+    salida = Path(args.salida)
+    salida.mkdir(parents=True, exist_ok=True)
+
+    # 1. Cargar los viajes únicos de ambas fuentes
+    cat_m = catalogar_viajes(args.measurement)
+    cat_c = catalogar_viajes(args.chiapas)
+    df_m = cargar_viajes_unicos(cat_m, 'Complementary', viaje_num_inicial=1)
+    df_c = cargar_viajes_unicos(cat_c, 'Chiapas', viaje_num_inicial=len(cat_m) + 1)
+    df_raw = pd.concat([df_m, df_c], ignore_index=True, sort=False)
+
+    assert df_raw.groupby('id_viaje')['viaje_num'].nunique().max() == 1, \
+        "Un viaje tiene dos números."
+    assert df_raw['viaje_num'].nunique() == df_raw['id_viaje'].nunique(), \
+        "viaje_num repetido en viajes distintos."
+    print(f"1. Crudo:   {len(df_raw)} filas, {df_raw['viaje_num'].nunique()} viajes")
+
+    # 2. Limpiar
+    df_limpio = limpiar_dataset(df_raw)
+    print(f"2. Limpio:  {len(df_limpio)} filas")
+
+    # 3. Segmentar y remuestrear
+    df_1hz = segmentar_y_remuestrear(df_limpio)
+    print(f"3. A 1 Hz:  {len(df_1hz)} filas, {df_1hz['viaje_num'].nunique()} viajes")
+
+    # 4. Particionar
+    df_part = particionar(df_1hz)
+
+    # 5. Normalizar
+    df_norm, parametros = normalizar(df_part)
+
+    # 6. Ventanas
+    res = generar_ventanas(df_norm)
+    print(f"6. Ventanas: {len(res['X_train'])} / {len(res['X_val'])} / {len(res['X_test'])}")
+
+    # 7. Guardar
+    pd.DataFrame({
+        'variable': list(parametros['media']),
+        'media': list(parametros['media'].values()),
+        'desviacion': list(parametros['desviacion'].values()),
+    }).to_csv(salida / 'parametros_normalizacion.csv', index=False)
+
+    np.savez_compressed(
+        salida / 'dataset_preparado_3d.npz',
+        X_train=res['X_train'], y_train=res['y_train'],
+        X_val=res['X_val'], y_val=res['y_val'],
+        X_test=res['X_test'], y_test=res['y_test'],
+        columnas=np.array(res['columnas']),
+        parametros=np.array(res['parametros']),
+    )
+    print(f"Resultados guardados en: {salida}")
+
+
+if __name__ == '__main__':
+    main()
