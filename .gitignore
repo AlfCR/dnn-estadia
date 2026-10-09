@@ -1,0 +1,47 @@
+# ===== Datos (no subir) =====
+data/
+*.npz
+*.parquet
+*.h5
+*.pkl
+*.xlsx
+
+# Excepto los CSV de docs
+!docs/*.csv
+
+# ===== Configuración local =====
+.env
+.env.local
+config.local.yaml
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ===== VS Code =====
+.vscode/
+!.vscode/settings.json.example
+
+# ===== Sistema operativo =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Logs =====
+*.log
+logs/
+
+# ===== Colab =====
+/content/drive/
