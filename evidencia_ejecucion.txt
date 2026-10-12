@@ -1,0 +1,12 @@
+Evidencia de ejecucion del E4
+Fecha: 2026-10-12 14:35:10
+
+ Salida del script
+1. Crudo:   30424 filas, 18 viajes
+Duplicados eliminados: 0
+2. Limpio:  30424 filas
+3. A 1 Hz:  18815 filas, 16 viajes
+6. Ventanas: 6959 / 1343 / 2342
+Resultados guardados en: data\processed
+
+Fin de la evidencia
