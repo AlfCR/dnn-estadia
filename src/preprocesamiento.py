@@ -1,6 +1,6 @@
 """
 Este script automatiza la limpieza, segmentación, normalización
-y generación de ventanas 3D () a partir de los datos de telemetría
+y generación de ventanas 3D (bloque de datos con 3 dimensiones) a partir de los datos de telemetría
 vehicular (OBD-II) de dos fuentes: "Measurement complementary"
 (2022) y "Mediciones Agosto 2024 Chiapas".
 
@@ -17,6 +17,8 @@ Uso:
         --measurement "data/raw/Measurement complementary" \\
         --chiapas "data/raw/Mediciones Agosto 2024 Chiapas" \\
         --salida "data/processed"
+
+                                 
 """
 
 import csv
