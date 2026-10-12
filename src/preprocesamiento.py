@@ -1,3 +1,24 @@
+"""
+Este script automatiza la limpieza, segmentación, normalización
+y generación de ventanas 3D () a partir de los datos de telemetría
+vehicular (OBD-II) de dos fuentes: "Measurement complementary"
+(2022) y "Mediciones Agosto 2024 Chiapas".
+
+Flujo del pipeline:
+    1. Catalogar viajes únicos en ambas carpetas.
+    2. Limpiar y convertir unidades al SI.
+    3. Segmentar por huecos y remuestrear a 1 Hz.
+    4. Particionar en entrenamiento, validación y prueba.
+    5. Normalizar con z-score (solo con entrenamiento).
+    6. Generar ventanas 3D de forma (n, 30 s, 23 características).
+
+Uso:
+    python src/preprocesamiento.py \\
+        --measurement "data/raw/Measurement complementary" \\
+        --chiapas "data/raw/Mediciones Agosto 2024 Chiapas" \\
+        --salida "data/processed"
+"""
+
 import csv
 import io
 import hashlib
@@ -16,7 +37,7 @@ MESES = {
     'nov': 11, 'dic': 12
 }
 
-# Configuración por defecto de ventanas ()
+# Configuración por defecto de ventanas (bloques de segundos para la red neuronal)
 VENTANA_SEG_DEFAULT = 30
 HORIZONTE_SEG_DEFAULT = 3
 VENTANA_MOVIL_SEG_DEFAULT = 10
@@ -36,24 +57,40 @@ VARIABLES_BASE = [
     'acel_total_ms2',   
 ]
 
-# 3. FUNCIONES
-'''
-1. Devuelve un valor como texto limpio.
 
-Si el valor es nulo devuelve ''; si no, lo convierte a texto, 
-cambia el espacio no separable por espacio normal y elimina 
-espacios al inicio y al final.
-'''
+
 def normalizar_texto(valor):
+    """
+    Limpia un valor de texto: elimina espacios al inicio y al final y
+    reemplaza espacios no separables (u00a0).
+
+    Args:
+        valor: Cualquier valor (str, float, NaN...).
+
+    Returns:
+        str: Texto normalizado. Devuelve '' si el valor es NaN.
+    """
+
     if pd.isna(valor):
         return ''
     return str(valor).replace('\u00a0', ' ').strip()
 
 
-''' 
-2.  Lee un archivo CSV y devuelve (filas, detalle).
-'''
 def leer_filas(ruta):
+    """
+    Lee un archivo CSV y devuelve sus filas como listas de texto,
+    sin que pandas interprete tipos ni decida el ancho de las columnas.
+
+    Args:
+        ruta (str o Path): Ruta al archivo .csv.
+
+    Returns:
+        tuple: (lista_de_filas, descripcion_lectura)
+
+    Raises:
+        FileNotFoundError: Si la ruta no existe.
+        ValueError: Si el archivo no es .csv o no se puede leer.
+    """
     ruta = Path(ruta)
 
     if not ruta.exists():
@@ -84,10 +121,18 @@ def leer_filas(ruta):
     return filas, f'csv: separador={sep!r}, encoding={cod}'
 
 
-'''
-3. Dividir las filas en bloques
-'''
 def partir_en_bloques(filas):
+    """
+    Divide una lista de filas en bloques. Cada bloque comienza con un
+    encabezado y le siguen sus filas de datos hasta el siguiente encabezado.
+
+    Args:
+        filas (list): Lista de filas (cada fila es una lista de strings).
+
+    Returns:
+        list[dict]: Lista de bloques con claves 'linea', 'encabezado' y 'filas'.
+    """
+
     
     #Filtrar filas completamente vacías
     pares = [
@@ -115,6 +160,18 @@ def partir_en_bloques(filas):
 
 
 def huella_bloque(encabezado, filas):
+    
+    """
+    Calcula el hash SHA-256 del encabezado y filas de un bloque.
+    Sirve para detectar bloques idénticos (duplicados).
+
+    Args:
+        encabezado (list[str]): Nombres de columnas.
+        filas (list[list[str]]): Filas del bloque.
+
+    Returns:
+        tuple: (huella_hex, filas_normalizadas)
+    """
 
     #Ancho del encabezado
     ancho = len(encabezado)
@@ -139,6 +196,17 @@ def huella_bloque(encabezado, filas):
 # ==== FUNCIONES DE CARGA ======
 
 def catalogar_viajes(ruta):
+    """
+    Recorre una carpeta, lee todos los archivos .csv, divide su contenido
+    en bloques (viajes), calcula la huella SHA-256 de cada bloque y
+    devuelve un diccionario de bloques únicos.
+
+    Args:
+        ruta (str o Path): Ruta a la carpeta con los archivos .csv.
+
+    Returns:
+        dict: {huella: {'encabezado', 'filas', 'fuentes'}}
+"""
     ruta = Path(ruta)
 
     if not ruta.exists():
@@ -179,8 +247,19 @@ def catalogar_viajes(ruta):
 
     return bloques_por_huella
 
-# === FUNCIONES DE CARGA DE VIAJES ======
 def cargar_viajes_unicos(catalogo, fuente, viaje_num_inicial=1):
+    """
+    Convierte el catálogo de bloques únicos en un DataFrame unificado.
+
+    Args:
+        catalogo (dict): Resultado de catalogar_viajes().
+        fuente (str): Etiqueta de origen ('Complementary' o 'Chiapas').
+        viaje_num_inicial (int): Número inicial para los viajes.
+
+    Returns:
+        pd.DataFrame: Todas las filas de todos los bloques.
+    """
+
     partes = [] #Inicializar lista de partes de DataFrame
     viaje_num = viaje_num_inicial
 
@@ -216,24 +295,35 @@ def cargar_viajes_unicos(catalogo, fuente, viaje_num_inicial=1):
 
 
 # === FUNCIONES DE CONVERSIÓN DE UNIDADES ======
-
 def fahrenheit_a_celsius(temp_f):
-    # Convierte un valor de temperatura de Fahrenheit a Celsius.
+    """ Convierte un valor de temperatura de Fahrenheit a Celsius."""
     return (temp_f - 32) * 5.0 / 9.0
 
 def mph_a_kmh(vel_mph):
-    # Convierte un valor de velocidad de millas por hora (mph) a kilómetros por hora (km/h).
+    """ Convierte un valor de velocidad de millas por hora (mph) a kilómetros por hora (km/h). """
     return vel_mph * 1.609344
     
 def psi_a_kpa(presion_psi):
-    # Convierte un valor de presión de libras por pulgada cuadrada (psi) a kilopascales (kPa).
+    """ Convierte un valor de presión de libras por pulgada cuadrada (psi) a kilopascales (kPa). """
     return presion_psi * 6.894757
 
 def ms_a_kmh(vel_ms):
-    # Convierte un valor de velocidad de metros por segundo (m/s) a kilómetros por hora (km/h).
+    """ Convierte un valor de velocidad de metros por segundo (m/s) a kilómetros por hora (km/h)."""
     return vel_ms * 3.6
 
 def convertir_fecha(texto):
+    
+    """
+    Convierte una fecha del formato '12-nov-2022 20:05:18.394'
+    a un objeto datetime de pandas.
+
+    Args:
+        texto (str): Fecha en formato textual.
+
+    Returns:
+        pd.Timestamp o pd.NaT: Fecha parseada o NaT si falla.
+    """
+
     try:
         partes = str(texto).strip().lower().split()
         if len(partes) < 2:
@@ -247,11 +337,29 @@ def convertir_fecha(texto):
         
 
 def sin_cambio(valor):
-    # Función de conversión que devuelve el valor sin cambios. (Para variables que no requieren conversión de unidades)
+    """
+    Función identidad: devuelve el valor sin modificar.
+    Se usa para variables que no requieren conversión de unidades.
+    """
     return valor
 
 def limpiar_dataset(df_raw):
-        # Diccionario: columna_original → (nuevo_nombre, función_conversión)
+    """
+    Limpia y normaliza el DataFrame unificado:
+    - Selecciona las 15 columnas relevantes.
+    - Renombra columnas a nombres cortos.
+    - Convierte unidades al SI.
+    - Parsea timestamps.
+    - Calcula la aceleración total.
+    - Agrega bandera 'tiene_motor'.
+    - Elimina duplicados y ordena.
+
+    Args:
+        df_raw (pd.DataFrame): DataFrame unificado.
+
+    Returns:
+        pd.DataFrame: DataFrame limpio.
+    """        
     conversiones = {
         'Engine RPM(rpm)':                     ('rpm', sin_cambio),
         'Engine Load(%)':                      ('carga_motor_pct', sin_cambio),
@@ -379,6 +487,9 @@ def segmentar_y_remuestrear(
                 .rename(columns={'timestamp_1s': 'timestamp'}))
 
     # Interpolar vacíos cortos por segmento
+    # Se procesa cada segmento por separado para no interpolar
+    # entre huecos grandes (evita inventar datos donde no los hay).
+
     partes = []
 
     for (viaje, segmento), g in df_1hz.groupby(['id_viaje', 'segmento_id']):
@@ -448,6 +559,17 @@ def particionar(df):
 
 # normalizar
 def normalizar(df, variables=VARIABLES_BASE):
+    """
+    Aplica z-score a las variables del modelo usando solo las
+    estadísticas del conjunto de entrenamiento (evita fuga de datos).
+
+    Args:
+        df (pd.DataFrame): DataFrame particionado.
+        variables (list): Variables a normalizar.
+
+    Returns:
+        tuple: (df_normalizado, parametros)
+    """
 
     modelo = df['particion'].isin(['entrenamiento', 'validacion', 'prueba'])
     assert df.loc[modelo, variables].notna().all().all(), \
@@ -488,7 +610,29 @@ def generar_ventanas(df_norm,
                      ventana_movil_seg=VENTANA_MOVIL_SEG_DEFAULT,
                      variables_modelo=VARIABLES_BASE,
                      variables_moviles=None):
-    
+    """
+    Genera las características móviles y las ventanas 3D para la DNN.
+
+    - Calcula media móvil, desviación móvil y diferencia de primer orden
+      sobre las variables dinámicas, agrupando por viaje y segmento.
+    - Crea ventanas de `ventana_seg` segundos con horizonte `horizonte_seg`.
+    - Devuelve arrays de NumPy para train, validación y prueba.
+
+    Args:
+        df_norm (pd.DataFrame): DataFrame normalizado.
+        ventana_seg (int): Tamaño de la ventana en segundos.
+        horizonte_seg (int): Horizonte de predicción en segundos.
+        ventana_movil_seg (int): Tamaño de las ventanas móviles.
+        variables_modelo (list): Variables base del modelo.
+        variables_moviles (list): Variables sobre las que calcular móviles.
+                                  Por defecto: rpm, carga_motor_pct,
+                                  acelerador_b_pct, velocidad_gps_kmh.
+
+    Returns:
+        dict: Diccionario con X_train, y_train, X_val, y_val, X_test,
+              y_test, columnas y parametros.
+    """
+
     if variables_moviles is None:
         variables_moviles = ['rpm', 'carga_motor_pct',
                              'acelerador_b_pct', 'velocidad_gps_kmh']
@@ -566,6 +710,13 @@ def generar_ventanas(df_norm,
     }
 
 def parsear_argumentos():
+    """
+    Define y parsea los argumentos de línea de comandos.
+
+    Returns:
+        argparse.Namespace: Argumentos con --measurement, --chiapas y --salida.
+    """
+
     parser = argparse.ArgumentParser(
         description='Preprocesamiento de datos de telemetría vehicular.'
     )
@@ -588,6 +739,11 @@ def parsear_argumentos():
 
 
 def main():
+    """
+    Orquesta el pipeline completo de preprocesamiento:
+    carga, limpieza, segmentación, partición, normalización,
+    generación de ventanas 3D y guardado de resultados.
+    """
     args = parsear_argumentos()
     salida = Path(args.salida)
     salida.mkdir(parents=True, exist_ok=True)
