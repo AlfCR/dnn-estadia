@@ -45,10 +45,15 @@ class ModeloPronostico:
         modelo.add(Input(shape=(self.ventana, self.caracteristicas)))
 
         # 2. Capa recurrente  (LSTM o GRU)
+        
         if self.tipo == 'LSTM':
             modelo.add(LSTM(self.neuronas, return_sequences=False))
         else: #Para el caso de trabajar con GRU
             modelo.add(GRU(self.neuronas, return_sequences=False))    
+
+        #NOTA: El return_sequences=False, solo necesitamos la predicción final de la secuencia,
+        # no la secuencia completa porque estamos haciendo un pronóstico de un solo paso (1 valor de salida).
+
 
         # 3. Dropout para evitar el sobreajuste (Memorizar)
         modelo.add(Dropout(self.dropout))
@@ -56,8 +61,8 @@ class ModeloPronostico:
         # 4. Capas densas 
         modelo.add(Dense(16, activation='relu')) # 16 -> cantidad de neuronas por capas | relu -> no linealidad en la red (Para que la red aprenda)
 
-        # 5. Capas de salida (1 neurona sin activación porque es regresión)
-        modelo.add(Dense(1))
+        # 5. Capas de salida (1 neurona sin activación porque es regresión para predecir un valor continuo.)
+        modelo.add(Dense(1)) 
 
         # Compilación
         modelo.compile(optimizer=Adam(learning_rate=0.001), loss='mse', metrics=['mae'])
