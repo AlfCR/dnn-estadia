@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 
-# Capas necesarias para construir las arquitecturas LSTM y GRU (Autoencoder / Pronóstico) 
+# Capas necesarias para construir las arquitecturas LSTM y GRU. 
 from tensorflow.keras.layers import ( Input, LSTM, GRU, Dense, Dropout)
 
 # Optimizador para ajustar los pesos del modelo durante el entrenamiento 
@@ -16,7 +16,7 @@ from tensorflow.keras.optimizers import Adam
 VENTANA = 30 # Tamaño de la ventana temporal
 CARACTERISTICAS = 23 #Caracteristicas
 NEURONAS = 64
-DROPOUT = 0.2 # Tasa de avandono, ayuda a evitar el sobreajuste, apagando una cantidad de neuronas en cada entrenamiento.
+DROPOUT = 0.2 # Tasa de abandono, ayuda a evitar el sobreajuste, apagando una cantidad de neuronas en cada entrenamiento.
 
 
 # 3. CLASE DEL MODELO
@@ -33,7 +33,7 @@ class ModeloPronostico:
         if self.tipo not in ['LSTM', 'GRU']:
             raise ValueError(f"El tipo '{self.tipo}' no es válido. Debe ser 'LSTM' o 'GRU'")
         
-        #Construcción del modelo y guardad
+        #Construcción del modelo y guardado. 
         self.modelo = self._construir_modelo()
 
     def _construir_modelo(self):
