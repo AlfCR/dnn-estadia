@@ -14,14 +14,29 @@ El presente proyecto implementa y evalúa arquitecturas de redes neuronales recu
 | **Diseño y Entrenamiento de Modelos DNN** | Implementación modular de arquitecturas LSTM y GRU en TensorFlow, con esquemas de entrenamiento robustos evaluados a través de 5 semillas aleatorias. | Módulos de arquitectura y notebooks independientes de entrenamiento por modelo. | [`src/modelos.py`](src/modelos.py)<br>[`notebooks/LSTM_ENTRENAMIENTO_ACP.ipynb`](notebooks/LSTM_ENTRENAMIENTO_ACP.ipynb)<br>[`notebooks/GRU_ENTRENAMIENTO_ACP.ipynb`](notebooks/GRU_ENTRENAMIENTO_ACP.ipynb) |
 | **Validación, Ajuste y Pruebas** | Evaluación de rendimiento predictivo, análisis de métricas de error (RMSE/MAE) y validación cruzada de hiperparámetros. | *En desarrollo* | *Por definir* |
 
+# Pasos para la ejecución del repositorio:
 
-# Clonar el repositorio
-git clone https://github.com/AlfCR/dnn-estadia.git
-cd dnn-estadia
+## Clonar el repositorio:
+- git clone https://github.com/AlfCR/dnn-estadia.git
+- cd dnn-estadia
 
-# Crear entorno virtual
-python -m venv venv
-source venv/bin/activate  # En Linux/macOS
 
-# Instalación de dependencias
-pip install -r requirements.txt
+## Crear entorno virtual
+1. Windows: 
+python -m venv venv 
+
+## Estructura del Repositorio
+
+```text
+
+├── notebooks/                  # Cuadernos de Google Colab
+│   ├── dnn_estadia_ACP.ipynb           # Pipeline de procesamiento.
+│   ├── LSTM_ENTRENAMIENTO_ACP.ipynb    # Entrenamiento y evaluación LSTM 
+│   └── GRU_ENTRENAMIENTO_ACP.ipynb     # Entrenamiento y evaluación GRU 
+│
+├── src/                      
+│   ├── modelos.py              # Arquitecturas LSTM y GRU documentadas
+│   └── preprocesamiento.py     # Script automatizado de limpieza
+│
+├── README.md                   # Este archivo
+└── requirements.txt            # Dependencias del proyecto (TensorFlow, Pandas, etc.)
