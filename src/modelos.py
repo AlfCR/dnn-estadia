@@ -16,7 +16,9 @@ from tensorflow.keras.optimizers import Adam
 VENTANA = 30 # Tamaño de la ventana temporal
 CARACTERISTICAS = 23 #Caracteristicas
 NEURONAS = 64
-DROPOUT = 0.2 # Tasa de abandono, ayuda a evitar el sobreajuste, apagando una cantidad de neuronas en cada entrenamiento.
+DROPOUT = 0.2 # Tasa de abandono, ayuda a evitar 
+              # el sobreajuste, apagando una cantidad 
+              # de neuronas en cada entrenamiento.
 
 
 # 3. CLASE DEL MODELO
