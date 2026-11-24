@@ -730,6 +730,13 @@ def parsear_argumentos():
         required=True,
         help='Carpeta "Mediciones Agosto 2024 Chiapas".'
     )
+
+    parser .add_argument(
+        '--audi',
+        required=True,
+        help='Carpeta ""Registros Audi".'
+    )
+
     parser.add_argument(
         '--salida',
         required=True,
@@ -751,9 +758,11 @@ def main():
     # 1. Cargar los viajes únicos de ambas fuentes
     cat_m = catalogar_viajes(args.measurement)
     cat_c = catalogar_viajes(args.chiapas)
+    cat_a = catalogar_viajes(args.audi)
     df_m = cargar_viajes_unicos(cat_m, 'Complementary', viaje_num_inicial=1)
     df_c = cargar_viajes_unicos(cat_c, 'Chiapas', viaje_num_inicial=len(cat_m) + 1)
-    df_raw = pd.concat([df_m, df_c], ignore_index=True, sort=False)
+    df_a = cargar_viajes_unicos(cat_a, 'AudiDec', viaje_num_inicial=len(cat_m) + len(cat_c) + 1)
+    df_raw = pd.concat([df_m, df_c, df_a], ignore_index=True, sort=False)
 
     assert df_raw.groupby('id_viaje')['viaje_num'].nunique().max() == 1, \
         "Un viaje tiene dos números."
