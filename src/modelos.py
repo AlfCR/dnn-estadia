@@ -1,4 +1,4 @@
-"""Arquitecturas LSTM y GRU para pronosticar la carga del motor.
+"""rquitecturas LSTM y GRU para pronosticar la carga del motor.
 """
 
 # 1. IMPORTS
@@ -11,7 +11,7 @@ from tensorflow.keras.optimizers import Adam, RMSprop, Nadam
 
 # 2. CONSTANTES
 VENTANA = 30          # Tamaño de la ventana temporal
-CARACTERISTICAS = 23  # Caracteristicas
+CARACTERISTICAS = 22 # Caracteristicas
 NEURONAS = 64
 DROPOUT = 0.2 # Tasa de abandono, ayuda a evitar el sobreajuste, apagando una cantidad de neuronas en cada entrenamiento.
 LEARNING_RATE = 0.001 # Tasa de aprendizaje, controla la velocidad a la que el modelo aprende.
