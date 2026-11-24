@@ -36,7 +36,11 @@ import pandas as pd
 MESES = {
     'ene': 1, 'feb': 2, 'mar': 3, 'abr': 4, 'may': 5,
     'jun': 6, 'jul': 7, 'ago': 8, 'sep': 9, 'oct': 10,
-    'nov': 11, 'dic': 12
+    'nov': 11, 'dic': 12,
+
+    # Para variantes en inglés -Ejemplo: Carpeta "Registros Audi"-
+    # (solo difieren estos cuatro)
+    'jan': 1, 'apr': 4, 'aug': 8, 'dec': 12,
 }
 
 # Configuración por defecto de ventanas (bloques de segundos para la red neuronal)
@@ -531,13 +535,13 @@ def particionar(df):
         pd.DataFrame: Mismo DataFrame + columna 'particion'.
     """
     particiones_config = {
-        'entrenamiento':  [1, 2, 3, 4, 8, 9],
-        'validacion':     [7],
-        'prueba':         [5, 6],
-        'prueba_externa': [16],
+        'entrenamiento':  [1, 2, 3, 4, 8, 9] + list(range(19, 45)),
+        'validacion':     [7] + [45, 46],
+        'prueba':         [5, 6] + [47, 48],
+        'prueba_externa': [16] + [49],
         'sin_motor':      [10, 11, 12, 13, 15, 18],
-    }
 
+    }
     todos = [v for viajes in particiones_config.values() for v in viajes]
     assert len(todos) == len(set(todos)), \
         "Hay viajes asignados a más de una partición."
