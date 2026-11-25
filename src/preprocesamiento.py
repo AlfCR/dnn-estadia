@@ -5,20 +5,19 @@ vehicular (OBD-II) de dos fuentes: "Measurement complementary"
 (2022) y "Mediciones Agosto 2024 Chiapas".
 
 Flujo del pipeline:
-    1. Catalogar viajes únicos en ambas carpetas.
+    1. Catalogar viajes únicos en las tres carpetas.
     2. Limpiar y convertir unidades al SI.
     3. Segmentar por huecos y remuestrear a 1 Hz.
     4. Particionar en entrenamiento, validación y prueba.
     5. Normalizar con z-score (solo con entrenamiento).
-    6. Generar ventanas 3D de forma (n, 30 s, 23 características).
+    6. Generar ventanas 3D de forma (n, 30 s, 22 características).
 
 Uso:
     python src/preprocesamiento.py \\
         --measurement "data/raw/Measurement complementary" \\
         --chiapas "data/raw/Mediciones Agosto 2024 Chiapas" \\
-        --salida "data/processed"
-
-                                 
+        --audi "data/raw/Registros Audi" \\
+        --salida "data/processed" 
 """
 
 import csv
@@ -675,6 +674,7 @@ def generar_ventanas(df_norm,
     # Generar ventanas
     x_list = {'entrenamiento': [], 'validacion': [], 'prueba': []}
     y_list = {'entrenamiento': [], 'validacion': [], 'prueba': []}
+    v_list = {'entrenamiento': [], 'validacion': [], 'prueba': []} 
 
     for (viaje, segmento), df_seg in df_modelo.groupby(['viaje_num', 'segmento_id']):
         particion = df_seg['particion'].iloc[0]
@@ -687,6 +687,7 @@ def generar_ventanas(df_norm,
             objetivo = data_y[i + ventana_seg + horizonte_seg - 1]
             x_list[particion].append(x_win)
             y_list[particion].append(objetivo)
+            v_list[particion].append(viaje)
 
     X_train = np.array(x_list['entrenamiento'])
     y_train = np.array(y_list['entrenamiento'])
@@ -694,6 +695,8 @@ def generar_ventanas(df_norm,
     y_val = np.array(y_list['validacion'])
     X_test = np.array(x_list['prueba'])
     y_test = np.array(y_list['prueba'])
+
+    
 
     # Verificar
     for nombre, arreglo in [('X_train', X_train), ('y_train', y_train),
@@ -711,6 +714,9 @@ def generar_ventanas(df_norm,
         'X_test': X_test, 'y_test': y_test,
         'columnas': caracteristicas,
         'parametros': [ventana_seg, horizonte_seg, ventana_movil_seg],
+        'viaje_train': np.array(v_list['entrenamiento']),
+        'viaje_val': np.array(v_list['validacion']),
+        'viaje_test': np.array(v_list['prueba']),
     }
 
 def parsear_argumentos():
@@ -738,7 +744,7 @@ def parsear_argumentos():
     parser .add_argument(
         '--audi',
         required=True,
-        help='Carpeta ""Registros Audi".'
+        help='Carpeta "Registros Audi".'
     )
 
     parser.add_argument(
@@ -763,6 +769,12 @@ def main():
     cat_m = catalogar_viajes(args.measurement)
     cat_c = catalogar_viajes(args.chiapas)
     cat_a = catalogar_viajes(args.audi)
+
+    assert len(cat_m) + len(cat_c) == 18, \
+        f"Los originales ya no suman 18 viajes: {len(cat_m) + len(cat_c)}"
+    assert len(cat_a) == 31, \
+        f"Los viajes de Audi no son 31: {len(cat_a)}"
+    
     df_m = cargar_viajes_unicos(cat_m, 'Complementary', viaje_num_inicial=1)
     df_c = cargar_viajes_unicos(cat_c, 'Chiapas', viaje_num_inicial=len(cat_m) + 1)
     df_a = cargar_viajes_unicos(cat_a, 'AudiDec', viaje_num_inicial=len(cat_m) + len(cat_c) + 1)
@@ -806,6 +818,9 @@ def main():
         X_test=res['X_test'], y_test=res['y_test'],
         columnas=np.array(res['columnas']),
         parametros=np.array(res['parametros']),
+        viaje_train=res['viaje_train'],
+        viaje_val=res['viaje_val'],
+        viaje_test=res['viaje_test'] 
     )
     print(f"Resultados guardados en: {salida}")
 
