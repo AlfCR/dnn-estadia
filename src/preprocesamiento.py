@@ -1,8 +1,8 @@
 """
 Este script automatiza la limpieza, segmentación, normalización
 y generación de ventanas 3D (bloque de datos con 3 dimensiones) a partir de los datos de telemetría
-vehicular (OBD-II) de dos fuentes: "Measurement complementary"
-(2022) y "Mediciones Agosto 2024 Chiapas".
+vehicular (OBD-II) de dos fuentes: "Measurement complementary" del año 2022, "Mediciones Agosto 2024 Chiapas"
+y "Registros Audi" del año 2024.
 
 Flujo del pipeline:
     1. Catalogar viajes únicos en las tres carpetas.
@@ -575,8 +575,9 @@ def normalizar(df, variables=VARIABLES_BASE):
     """
 
     modelo = df['particion'].isin(['entrenamiento', 'validacion', 'prueba'])
-    assert df.loc[modelo, variables].notna().all().all(), \
-        "Hay vacíos en las filas del modelo."
+    n_vacios = int(df.loc[modelo, variables].isna().any(axis=1).sum())
+    if n_vacios:
+        print(f"Aviso: {n_vacios} filas con NaN en variables del modelo. Se cortarán los segmentos al generar las ventanas.")
 
     # Filtrar solo entrenamiento
     train = df[df['particion'] == 'entrenamiento']
@@ -645,6 +646,13 @@ def generar_ventanas(df_norm,
     df_modelo = df_modelo.sort_values(
         ['viaje_num', 'segmento_id', 'timestamp']
     ).reset_index(drop=True)
+    
+    # Un vacío rompe la continuidad: se parte el segmento en ese punto
+    valido = df_modelo[variables_modelo].notna().all(axis=1)
+    cortes = (~valido).groupby([df_modelo['viaje_num'], df_modelo['segmento_id']]).cumsum()
+    df_modelo['segmento_id'] = df_modelo['segmento_id'].astype('int64') * 10000 + cortes
+    df_modelo = df_modelo[valido].reset_index(drop=True)
+
 
     # Características móviles
     nuevas_columnas = []
@@ -714,9 +722,9 @@ def generar_ventanas(df_norm,
         'X_test': X_test, 'y_test': y_test,
         'columnas': caracteristicas,
         'parametros': [ventana_seg, horizonte_seg, ventana_movil_seg],
-        'viaje_train': np.array(v_list['entrenamiento']),
-        'viaje_val': np.array(v_list['validacion']),
-        'viaje_test': np.array(v_list['prueba']),
+        'viaje_train': np.array(v_list['entrenamiento'], dtype=int),
+        'viaje_val': np.array(v_list['validacion'], dtype=int),
+        'viaje_test': np.array(v_list['prueba'], dtype=int),
     }
 
 def parsear_argumentos():
@@ -765,7 +773,7 @@ def main():
     salida = Path(args.salida)
     salida.mkdir(parents=True, exist_ok=True)
 
-    # 1. Cargar los viajes únicos de ambas fuentes
+    # 1. Cargar los viajes únicos de las tres carpetas y unirlos en un solo conjunto. 
     cat_m = catalogar_viajes(args.measurement)
     cat_c = catalogar_viajes(args.chiapas)
     cat_a = catalogar_viajes(args.audi)
