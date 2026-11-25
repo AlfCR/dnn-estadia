@@ -1,8 +1,8 @@
 """
 Este script automatiza la limpieza, segmentación, normalización
 y generación de ventanas 3D (bloque de datos con 3 dimensiones) a partir de los datos de telemetría
-vehicular (OBD-II) de dos fuentes: "Measurement complementary" del año 2022, "Mediciones Agosto 2024 Chiapas"
-y "Registros Audi" del año 2024.
+vehicular (OBD-II) de tres fuentes: "Measurement complementary" (2022),
+"Mediciones Agosto 2024 Chiapas" y "Registros Audi" (diciembre de 2022).
 
 Flujo del pipeline:
     1. Catalogar viajes únicos en las tres carpetas.
@@ -556,7 +556,6 @@ def particionar(df):
 
     assert df['particion'].notna().all(), \
         f"Viajes sin asignar: {sorted(df.loc[df['particion'].isna(), 'viaje_num'].unique())}"
-
     return df
 
 
@@ -577,11 +576,13 @@ def normalizar(df, variables=VARIABLES_BASE):
     modelo = df['particion'].isin(['entrenamiento', 'validacion', 'prueba'])
     n_vacios = int(df.loc[modelo, variables].isna().any(axis=1).sum())
     if n_vacios:
-        print(f"Aviso: {n_vacios} filas con NaN en variables del modelo. Se cortarán los segmentos al generar las ventanas.")
+        print(f"Aviso: {n_vacios} filas con NaN en variables del modelo. "
+              f"Se cortarán los segmentos al generar las ventanas.")
 
     # Filtrar solo entrenamiento
     train = df[df['particion'] == 'entrenamiento']
 
+    
     # Calcular media y desviación
     media = train[variables].mean()
     desviacion = train[variables].std()
